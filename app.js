@@ -5,14 +5,14 @@ const axios = require('axios');
 const app = express();
 app.use(bodyParser.json());
 
-// Все конфигурируется через переменные окружения
-const WEBHOOK_USER  = process.env.WEBHOOK_USER;
-const WEBHOOK_PASS  = process.env.WEBHOOK_PASS;
-const LAVA_BOOK_ID  = process.env.LAVA_BOOK_ID;
+// Config via env
+const WEBHOOK_USER = process.env.WEBHOOK_USER;
+const WEBHOOK_PASS = process.env.WEBHOOK_PASS;
+const LAVA_BOOK_ID = process.env.LAVA_BOOK_ID;
 const LAVA_TESTPAY_ID = process.env.LAVA_TESTPAY_ID;
 const GC_PRODUCT_ID = process.env.GC_PRODUCT_ID;
-const GC_API_KEY    = process.env.GC_API_KEY;
-const GC_DOMAIN     = process.env.GC_DOMAIN;
+const GC_API_KEY = process.env.GC_API_KEY;
+const GC_DOMAIN = process.env.GC_DOMAIN;
 
 async function createSale(email, name, amount, currency, productId) {
   try {
@@ -23,18 +23,18 @@ async function createSale(email, name, amount, currency, productId) {
         action: 'add',
         user: {
           email: email,
-          first_name: name || 'Без имени'
+          first_name: name || 'Без имени',
         },
         system: {
-          refresh_if_exists: 1
+          refresh_if_exists: 1,
         },
         sale: {
           product_id: GC_PRODUCT_ID,
           payment_status: 'paid',
           payment_type: 'LavaTop',
           sum: amount || 0,
-          comment: `Оплата через LavaTop (${productId}, ${currency})`
-        }
+          comment: `Оплата через LavaTop (${productId}, ${currency})`,
+        },
       }
     );
     console.log('✅ Продажа создана в GetCourse', resp.data);
@@ -56,23 +56,27 @@ app.post('/lava-webhook', async (req, res) => {
 
   const data = req.body;
   console.log('📩 Получен веб‑хук:', JSON.stringify(data, null, 2));
-  const { status, buyer, productId, amount, currency } = data;
 
-  if (status === 'PAID') {
+  const { eventType, status, product, buyer, amount, currency } = data;
+
+  // handle successful non-subscription payment
+  if (eventType === 'payment.success' && status === 'completed') {
     const email = buyer?.email;
-    const name  = buyer?.name || 'Без имени';
+    const name = buyer?.name || 'Без имени';
+    const prodId = product?.id;
     if (!email) {
       console.warn('❌ Нет email в заказе, доступ не выдан');
-    } else if (productId === LAVA_BOOK_ID || productId === LAVA_TESTPAY_ID) {
-      await createSale(email, name, amount, currency, productId);
+    } else if (prodId === LAVA_BOOK_ID || prodId === LAVA_TESTPAY_ID) {
+      await createSale(email, name, amount, currency, prodId);
     } else {
-      console.log(`ℹ️ Оплата по другому продукту (${productId}), пропускаем`);
+      console.log(`ℹ️ Оплата по другому продукту (${prodId}), пропускаем`);
     }
   }
+
   res.status(200).send('ok');
 });
 
-// Запускаем сервер
+// start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Сервер слушает на порту ${PORT}`);
